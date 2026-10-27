@@ -1,0 +1,19 @@
+{
+  "name": "@astrolabe/sdk",
+  "version": "1.0.0",
+  "description": "Autonomous AI Agent Payment SDK on Stellar Soroban with fee sponsorship and spend policies",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc --watch"
+  },
+  "dependencies": {
+    "@stellar/stellar-sdk": "^12.3.0",
+    "undici": "^6.19.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.4.5"
+  }
+}
