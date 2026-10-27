@@ -1,0 +1,26 @@
+{
+  "name": "@astrolabe/cli",
+  "version": "1.0.0",
+  "description": "Command-line tool for AstrolabePay to manage AI agent wallets, spend policies, and execute x402 payments",
+  "bin": {
+    "astrolabe": "dist/bin.js",
+    "astrolabepay": "dist/bin.js"
+  },
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/bin.js"
+  },
+  "dependencies": {
+    "@astrolabe/sdk": "^1.0.0",
+    "@astrolabe/proxy": "^1.0.0",
+    "@stellar/stellar-sdk": "^12.3.0",
+    "commander": "^12.1.0",
+    "chalk": "^4.1.2"
+  },
+  "devDependencies": {
+    "@types/commander": "^2.12.2",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.4.5"
+  }
+}
