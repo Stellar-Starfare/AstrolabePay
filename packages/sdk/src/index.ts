@@ -7,3 +7,4 @@ export * from './retry';
 export * from './trust';
 export * from './relayer';
 export * from './client';
+export * from './adapters';
