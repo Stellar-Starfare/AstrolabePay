@@ -1,8 +1,8 @@
-import { Keypair } from '@stellar/stellar-sdk';
+import { Keypair, rpc, Contract, TransactionBuilder, Account, nativeToScVal, scValToNative } from '@stellar/stellar-sdk';
 import { request as undiciRequest } from 'undici';
 import { SpendPolicy, AstrolabeX402Challenge, AstrolabePaymentPayload, PaymentReceipt } from './types';
 import { ASTROLABE_CONFIG } from './constants';
-import { SpendPolicyEngine } from './policy';
+import { SpendPolicyEngine, PolicyViolationError } from './policy';
 import { ResponseCache } from './cache';
 import { RetryGuard } from './retry';
 import { TrustTracker } from './trust';
@@ -10,10 +10,14 @@ import { FeeSponsoredRelayer } from './relayer';
 
 export interface AstrolabeClientOptions {
   agentSecretKey: string;
+  contractId?: string;
+  rpcUrl?: string;
+  network?: 'testnet' | 'mainnet';
   spendPolicy?: SpendPolicy;
   sponsorSecretKey?: string;
   cacheTtlMs?: number;
   maxRetries?: number;
+  verifyOnChain?: boolean;
 }
 
 export class AstrolabeClient {
@@ -23,6 +27,9 @@ export class AstrolabeClient {
   private retryGuard: RetryGuard;
   private trustTracker: TrustTracker;
   private relayer: FeeSponsoredRelayer;
+  private contractId: string;
+  private rpcUrl: string;
+  private verifyOnChain: boolean;
 
   constructor(options: AstrolabeClientOptions) {
     this.agentKeypair = Keypair.fromSecret(options.agentSecretKey);
@@ -30,7 +37,10 @@ export class AstrolabeClient {
     this.cache = new ResponseCache(options.cacheTtlMs);
     this.retryGuard = new RetryGuard({ maxRetries: options.maxRetries });
     this.trustTracker = new TrustTracker();
-    this.relayer = new FeeSponsoredRelayer(options.sponsorSecretKey);
+    this.contractId = options.contractId || ASTROLABE_CONFIG.TESTNET.contractId;
+    this.rpcUrl = options.rpcUrl || ASTROLABE_CONFIG.TESTNET.rpcUrl;
+    this.verifyOnChain = options.verifyOnChain ?? false;
+    this.relayer = new FeeSponsoredRelayer(options.sponsorSecretKey, this.rpcUrl, this.contractId);
   }
 
   getAgentAddress(): string {
@@ -45,12 +55,47 @@ export class AstrolabeClient {
     return this.trustTracker;
   }
 
+  async checkOnChainAllowance(amountStroops: bigint): Promise<boolean> {
+    try {
+      const server = new rpc.Server(this.rpcUrl);
+      const contract = new Contract(this.contractId);
+      const tx = new TransactionBuilder(new Account(this.agentKeypair.publicKey(), '0'), {
+        fee: '100',
+        networkPassphrase: ASTROLABE_CONFIG.TESTNET.networkPassphrase,
+      })
+        .addOperation(
+          contract.call(
+            'check_agent_allowance',
+            nativeToScVal(this.agentKeypair.publicKey(), { type: 'address' }),
+            nativeToScVal(amountStroops, { type: 'i128' })
+          )
+        )
+        .setTimeout(30)
+        .build();
+
+      const sim = await server.simulateTransaction(tx);
+      if (rpc.Api.isSimulationSuccess(sim) && sim.result) {
+        return scValToNative(sim.result.retval) === true;
+      }
+      return false;
+    } catch {
+      return true;
+    }
+  }
+
   async get<T = any>(url: string, headers: Record<string, string> = {}): Promise<T> {
     return this.request<T>(url, { method: 'GET', headers });
   }
 
   async post<T = any>(url: string, body: any, headers: Record<string, string> = {}): Promise<T> {
     return this.request<T>(url, { method: 'POST', body, headers });
+  }
+
+  async fetch<T = any>(
+    url: string,
+    options: { method?: string; body?: any; headers?: Record<string, string> } = {}
+  ): Promise<T> {
+    return this.request<T>(url, options);
   }
 
   async request<T = any>(
@@ -107,6 +152,17 @@ export class AstrolabeClient {
 
       // 5. Enforce Spend Policy before creating or signing any transaction
       this.policyEngine.validate(url, amountStroops, accept.assetContractId);
+
+      // Verify on-chain allowance if enabled
+      if (this.verifyOnChain) {
+        const hasAllowance = await this.checkOnChainAllowance(amountStroops);
+        if (!hasAllowance) {
+          throw new PolicyViolationError(
+            `On-chain smart contract policy rejected spend of ${amountStroops} stroops`,
+            'ON_CHAIN_ALLOWANCE_EXCEEDED'
+          );
+        }
+      }
 
       // 6. Settle payment via Fee-Sponsored Relayer
       const settlement = await this.relayer.settleSponsoredPayment({
