@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Bot, Plus, Shield, Sliders, Copy, Check, Power, AlertCircle, Key } from 'lucide-react';
-import { AgentAccount, createNewAgentKeypair, truncateAddress } from '../lib/stellar';
+import { Bot, Plus, Shield, Sliders, Copy, Check, Power, AlertCircle, Key, ExternalLink, CheckCircle } from 'lucide-react';
+import { AgentAccount, createNewAgentKeypair, truncateAddress, CONTRACT_ID } from '../lib/stellar';
 
 interface AgentManagerProps {
   agents: AgentAccount[];
@@ -20,6 +20,7 @@ export const AgentManager: React.FC<AgentManagerProps> = ({
   const [dailyBudget, setDailyBudget] = useState(25);
   const [maxPerCall, setMaxPerCall] = useState(1);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [registrationNotice, setRegistrationNotice] = useState<string | null>(null);
 
   const handleCopy = (key: string) => {
     navigator.clipboard.writeText(key);
@@ -34,6 +35,8 @@ export const AgentManager: React.FC<AgentManagerProps> = ({
     onAddAgent(newAgent);
     setName('');
     setShowCreateModal(false);
+    setRegistrationNotice(`Sub-Agent [${newAgent.name}] provisioned with on-chain daily limit ${dailyBudget} XLM. Keypair derived & registered.`);
+    setTimeout(() => setRegistrationNotice(null), 5000);
   };
 
   return (
@@ -56,6 +59,24 @@ export const AgentManager: React.FC<AgentManagerProps> = ({
           <span>Provision New Sub-Agent</span>
         </button>
       </div>
+
+      {registrationNotice && (
+        <div style={{
+          background: 'rgba(16, 185, 129, 0.15)',
+          border: '1px solid rgba(16, 185, 129, 0.4)',
+          borderRadius: '8px',
+          padding: '0.75rem 1rem',
+          color: '#a7f3d0',
+          fontSize: '0.82rem',
+          marginBottom: '1.25rem',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.5rem'
+        }}>
+          <CheckCircle size={16} color="var(--emerald-400)" />
+          <span>{registrationNotice}</span>
+        </div>
+      )}
 
       {/* Agent Cards Grid */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '1.25rem' }}>
@@ -104,44 +125,42 @@ export const AgentManager: React.FC<AgentManagerProps> = ({
 
               {/* Public key */}
               <div style={{
-                background: 'rgba(0, 0, 0, 0.3)',
-                padding: '0.45rem 0.65rem',
+                background: '#040714',
+                padding: '0.5rem 0.75rem',
                 borderRadius: '6px',
                 display: 'flex',
-                alignItems: 'center',
                 justifyContent: 'space-between',
-                fontSize: '0.75rem',
-                fontFamily: 'var(--font-mono)',
-                color: 'var(--text-secondary)'
+                alignItems: 'center',
+                fontSize: '0.76rem',
+                fontFamily: 'var(--font-mono)'
               }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                  <Key size={13} color="var(--gold-400)" />
-                  <span>{truncateAddress(agent.publicKey, 6, 6)}</span>
-                </div>
+                <span style={{ color: 'var(--text-secondary)' }}>
+                  {truncateAddress(agent.publicKey, 8, 6)}
+                </span>
                 <button
                   onClick={() => handleCopy(agent.publicKey)}
-                  className="btn-ghost"
-                  style={{ padding: '0.2rem' }}
-                  title="Copy Agent Stellar Public Key"
+                  style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                  title="Copy Public Key"
                 >
-                  {copiedKey === agent.publicKey ? <Check size={13} color="var(--emerald-400)" /> : <Copy size={13} />}
+                  {copiedKey === agent.publicKey ? <Check size={14} color="var(--emerald-400)" /> : <Copy size={14} />}
                 </button>
               </div>
 
-              {/* Daily Budget Progress Bar */}
+              {/* Budget Progress Bar */}
               <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', marginBottom: '0.35rem' }}>
-                  <span style={{ color: 'var(--text-secondary)' }}>Daily Spend Cap</span>
-                  <span style={{ fontWeight: 600, color: '#ffffff' }}>
-                    {agent.spentToday.toFixed(2)} / {agent.dailyBudget} XLM ({percentUsed}%)
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.76rem', marginBottom: '0.35rem' }}>
+                  <span style={{ color: 'var(--text-secondary)' }}>24h Rolling Spend</span>
+                  <span style={{ fontWeight: 600, color: percentUsed > 90 ? 'var(--rose-400)' : '#ffffff' }}>
+                    {agent.spentToday.toFixed(2)} / {agent.dailyBudget.toFixed(2)} XLM ({percentUsed}%)
                   </span>
                 </div>
-                <div style={{ background: '#1e293b', height: '6px', borderRadius: '3px', overflow: 'hidden' }}>
+                <div style={{ width: '100%', height: '6px', background: 'rgba(255, 255, 255, 0.08)', borderRadius: '3px', overflow: 'hidden' }}>
                   <div style={{
                     width: `${percentUsed}%`,
                     height: '100%',
-                    background: percentUsed > 85 ? 'var(--rose-500)' : 'linear-gradient(90deg, #f59e0b, #fbbf24)',
-                    transition: 'width 0.3s ease'
+                    background: percentUsed > 90 ? 'var(--rose-500)' : 'linear-gradient(90deg, var(--gold-400), var(--cyan-400))',
+                    borderRadius: '3px',
+                    transition: 'width 0.4s ease'
                   }} />
                 </div>
               </div>
@@ -151,19 +170,19 @@ export const AgentManager: React.FC<AgentManagerProps> = ({
                 display: 'grid',
                 gridTemplateColumns: '1fr 1fr',
                 gap: '0.5rem',
-                fontSize: '0.76rem',
+                padding: '0.6rem 0.75rem',
                 background: 'rgba(255, 255, 255, 0.02)',
-                padding: '0.5rem',
                 borderRadius: '6px',
-                border: '1px solid var(--border-glass)'
+                fontSize: '0.75rem',
+                border: '1px solid var(--border-subtle)'
               }}>
                 <div>
-                  <span style={{ color: 'var(--text-muted)' }}>Max / Call: </span>
-                  <span style={{ fontWeight: 600, color: 'var(--cyan-400)' }}>{agent.maxPerCall} XLM</span>
+                  <div style={{ color: 'var(--text-muted)' }}>Max Per Call</div>
+                  <div style={{ fontWeight: 600, color: 'var(--cyan-400)' }}>{agent.maxPerCall} XLM</div>
                 </div>
                 <div>
-                  <span style={{ color: 'var(--text-muted)' }}>Policy: </span>
-                  <span style={{ fontWeight: 600, color: 'var(--emerald-400)' }}>On-Chain</span>
+                  <div style={{ color: 'var(--text-muted)' }}>On-Chain Policy</div>
+                  <div style={{ fontWeight: 600, color: 'var(--emerald-400)' }}>Enforced (Soroban)</div>
                 </div>
               </div>
             </div>
@@ -171,29 +190,24 @@ export const AgentManager: React.FC<AgentManagerProps> = ({
         })}
       </div>
 
-      {/* Modal for Provisioning New Agent */}
+      {/* Provision Sub-Agent Modal */}
       {showCreateModal && (
         <div style={{
           position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
+          inset: 0,
           background: 'rgba(0, 0, 0, 0.75)',
-          backdropFilter: 'blur(8px)',
+          backdropFilter: 'blur(6px)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           zIndex: 100,
           padding: '1rem'
         }}>
-          <div className="glass-panel" style={{ width: '100%', maxWidth: '440px', padding: '1.75rem' }}>
-            <h3 style={{ fontSize: '1.2rem', color: '#ffffff', marginBottom: '0.5rem' }}>
-              Provision Autonomous Sub-Agent
-            </h3>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.82rem', marginBottom: '1.25rem' }}>
-              Generates a dedicated cryptographic Stellar keypair with on-chain Soroban spend policy rules.
-            </p>
+          <div className="glass-panel" style={{ maxWidth: '440px', width: '100%', padding: '1.75rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '1.25rem' }}>
+              <Shield color="var(--gold-400)" size={22} />
+              <h3 style={{ fontSize: '1.15rem', color: '#ffffff' }}>Provision AI Sub-Agent Keypair</h3>
+            </div>
 
             <form onSubmit={handleCreate}>
               <div style={{ marginBottom: '1rem' }}>

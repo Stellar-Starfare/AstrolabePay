@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Server, Star, Plus, ShieldCheck, Zap, Activity, ExternalLink, Clock } from 'lucide-react';
-import { ServiceEndpoint, INITIAL_SERVICES, truncateAddress } from '../lib/stellar';
+import { Server, Star, Plus, ShieldCheck, Zap, Activity, ExternalLink, Clock, CheckCircle } from 'lucide-react';
+import { ServiceEndpoint, INITIAL_SERVICES, truncateAddress, CONTRACT_ID } from '../lib/stellar';
 
 interface ProviderRegistryProps {
   services?: ServiceEndpoint[];
@@ -13,6 +13,7 @@ export const ProviderRegistry: React.FC<ProviderRegistryProps> = () => {
   const [costPerCall, setCostPerCall] = useState(0.05);
   const [endpointUrl, setEndpointUrl] = useState('');
   const [description, setDescription] = useState('');
+  const [notice, setNotice] = useState<string | null>(null);
 
   const handleRegister = (e: React.FormEvent) => {
     e.preventDefault();
@@ -35,6 +36,8 @@ export const ProviderRegistry: React.FC<ProviderRegistryProps> = () => {
     setName('');
     setEndpointUrl('');
     setDescription('');
+    setNotice(`Registered service '${newService.name}' with fee ${newService.costPerCall} XLM into Soroban Provider Registry.`);
+    setTimeout(() => setNotice(null), 5000);
   };
 
   return (
@@ -54,6 +57,24 @@ export const ProviderRegistry: React.FC<ProviderRegistryProps> = () => {
           <span>Register New Paid API</span>
         </button>
       </div>
+
+      {notice && (
+        <div style={{
+          background: 'rgba(16, 185, 129, 0.15)',
+          border: '1px solid rgba(16, 185, 129, 0.4)',
+          borderRadius: '8px',
+          padding: '0.75rem 1rem',
+          color: '#a7f3d0',
+          fontSize: '0.82rem',
+          marginBottom: '1.25rem',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.5rem'
+        }}>
+          <CheckCircle size={16} color="var(--emerald-400)" />
+          <span>{notice}</span>
+        </div>
+      )}
 
       {/* Services List */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: '1.25rem' }}>
@@ -98,67 +119,54 @@ export const ProviderRegistry: React.FC<ProviderRegistryProps> = () => {
               fontSize: '0.74rem',
               color: 'var(--cyan-400)',
               overflowX: 'auto',
-              border: '1px solid var(--border-subtle)'
+              whiteSpace: 'nowrap'
             }}>
               {svc.endpointUrl}
             </div>
 
-            {/* Metrics footer */}
+            {/* Metrics */}
             <div style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(3, 1fr)',
               gap: '0.5rem',
-              borderTop: '1px solid var(--border-subtle)',
-              paddingTop: '0.75rem',
-              textAlign: 'center'
+              padding: '0.65rem 0.75rem',
+              background: 'rgba(255, 255, 255, 0.02)',
+              borderRadius: '6px',
+              border: '1px solid var(--border-subtle)',
+              fontSize: '0.74rem'
             }}>
               <div>
-                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Cost / Call</div>
-                <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--gold-400)' }}>
-                  {svc.costPerCall} {svc.asset}
-                </div>
+                <div style={{ color: 'var(--text-muted)' }}>Price</div>
+                <div style={{ fontWeight: 700, color: 'var(--gold-400)' }}>{svc.costPerCall} {svc.asset}</div>
               </div>
               <div>
-                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Uptime</div>
-                <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--emerald-400)' }}>
-                  {svc.uptime}
-                </div>
+                <div style={{ color: 'var(--text-muted)' }}>Uptime</div>
+                <div style={{ fontWeight: 600, color: 'var(--emerald-400)' }}>{svc.uptime}</div>
               </div>
               <div>
-                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>p95 Latency</div>
-                <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#ffffff' }}>
-                  {svc.p95LatencyMs}ms
-                </div>
+                <div style={{ color: 'var(--text-muted)' }}>p95 Latency</div>
+                <div style={{ fontWeight: 600, color: '#ffffff' }}>{svc.p95LatencyMs}ms</div>
               </div>
             </div>
           </div>
         ))}
       </div>
 
-      {/* Add Modal */}
+      {/* Add API Modal */}
       {showAddModal && (
         <div style={{
           position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
+          inset: 0,
           background: 'rgba(0, 0, 0, 0.75)',
-          backdropFilter: 'blur(8px)',
+          backdropFilter: 'blur(6px)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           zIndex: 100,
           padding: '1rem'
         }}>
-          <div className="glass-panel" style={{ width: '100%', maxWidth: '440px', padding: '1.75rem' }}>
-            <h3 style={{ fontSize: '1.2rem', color: '#ffffff', marginBottom: '0.5rem' }}>
-              Register Paid AI Service Endpoint
-            </h3>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.82rem', marginBottom: '1.25rem' }}>
-              Expose your proprietary model or computation via Astrolabe Edge Reverse Proxy with automated 402 challenge.
-            </p>
-
+          <div className="glass-panel" style={{ maxWidth: '440px', width: '100%', padding: '1.75rem' }}>
+            <h3 style={{ fontSize: '1.15rem', color: '#ffffff', marginBottom: '1.25rem' }}>Register API Provider</h3>
             <form onSubmit={handleRegister}>
               <div style={{ marginBottom: '1rem' }}>
                 <label style={{ display: 'block', fontSize: '0.82rem', color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
@@ -167,23 +175,9 @@ export const ProviderRegistry: React.FC<ProviderRegistryProps> = () => {
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Claude 3.5 Sonnet Reasoning Node"
+                  placeholder="e.g. Real-Time DeepSeek R1 Engine"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="input-field"
-                />
-              </div>
-
-              <div style={{ marginBottom: '1rem' }}>
-                <label style={{ display: 'block', fontSize: '0.82rem', color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
-                  Upstream Endpoint URL
-                </label>
-                <input
-                  type="url"
-                  required
-                  placeholder="https://api.myprovider.com/v1/reason"
-                  value={endpointUrl}
-                  onChange={(e) => setEndpointUrl(e.target.value)}
                   className="input-field"
                 />
               </div>
@@ -194,26 +188,40 @@ export const ProviderRegistry: React.FC<ProviderRegistryProps> = () => {
                 </label>
                 <input
                   type="number"
-                  step="0.005"
+                  step="0.001"
                   min="0.001"
-                  max="50"
+                  max="10"
                   value={costPerCall}
                   onChange={(e) => setCostPerCall(Number(e.target.value))}
                   className="input-field"
                 />
               </div>
 
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', fontSize: '0.82rem', color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
+                  Protected Proxy Endpoint URL
+                </label>
+                <input
+                  type="url"
+                  required
+                  placeholder="https://proxy.astrolabe.stellar.network/v1/..."
+                  value={endpointUrl}
+                  onChange={(e) => setEndpointUrl(e.target.value)}
+                  className="input-field"
+                />
+              </div>
+
               <div style={{ marginBottom: '1.5rem' }}>
                 <label style={{ display: 'block', fontSize: '0.82rem', color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
-                  Description / Model Specs
+                  Description
                 </label>
                 <textarea
                   rows={2}
-                  placeholder="Autonomous tool calling, multi-modal vision, etc."
+                  placeholder="Describe your AI service..."
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   className="input-field"
-                  style={{ resize: 'none' }}
+                  style={{ resize: 'vertical' }}
                 />
               </div>
 
@@ -222,7 +230,7 @@ export const ProviderRegistry: React.FC<ProviderRegistryProps> = () => {
                   Cancel
                 </button>
                 <button type="submit" className="btn-gold">
-                  Publish to Registry
+                  Register On-Chain
                 </button>
               </div>
             </form>
