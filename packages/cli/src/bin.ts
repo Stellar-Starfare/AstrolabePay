@@ -21,7 +21,7 @@ program
     console.log(chalk.cyan(`\nChecking balance for ${target}...`));
     try {
       const res = await undiciRequest(`${ASTROLABE_CONFIG.TESTNET.horizonUrl}/accounts/${target}`);
-      if (!res.ok) {
+      if (res.statusCode !== 200) {
         console.log(chalk.yellow(`Account not funded on Testnet yet.`));
         return;
       }
@@ -39,9 +39,18 @@ program
 program
   .command('fetch <url>')
   .description('Call an x402-monetized endpoint with autonomous fee-sponsored settlement')
-  .option('-s, --secret <secretKey>', 'Agent secret key')
+  .option('-s, --secret <secretKey>', 'Agent secret key (or set STELLAR_AGENT_SECRET)')
   .action(async (url, opts) => {
-    const secret = opts.secret || 'SCZEAKU3JHHO6MFEUYVDRD35367FXUP5GPF4DBXSX76DAZFHHTUYMUGG';
+    const secret = opts.secret || process.env.STELLAR_AGENT_SECRET;
+    if (!secret) {
+      console.error(
+        chalk.red(
+          '\nError: Agent secret key is required. Pass with -s <secretKey> or set STELLAR_AGENT_SECRET in your environment.\n'
+        )
+      );
+      process.exit(1);
+    }
+
     console.log(chalk.cyan(`\n🚀 AstrolabePay Client: Fetching ${url}`));
     const client = new AstrolabeClient({
       agentSecretKey: secret,
@@ -62,8 +71,9 @@ program
 program
   .command('agent:create <agentId> <name>')
   .description('Derive a new autonomous agent keypair with daily limits')
-  .action((agentId, name) => {
-    const master = 'SCZEAKU3JHHO6MFEUYVDRD35367FXUP5GPF4DBXSX76DAZFHHTUYMUGG';
+  .option('-m, --master <masterSecret>', 'Master secret key for derivation (or set STELLAR_MASTER_SECRET)')
+  .action((agentId, name, opts) => {
+    const master = opts.master || process.env.STELLAR_MASTER_SECRET || Keypair.random().secret();
     const manager = new AgentWalletManager(master);
     const agent = manager.createAgent(agentId, name, {
       dailyLimitStroops: 50000000n, // 5 XLM
@@ -84,7 +94,7 @@ program
   .option('-p, --port <port>', 'Port number', '4022')
   .action((opts) => {
     const port = Number(opts.port) || 4022;
-    const server = buildAstrolabeProxy(port);
+    const server = buildAstrolabeProxy({ port });
     server.listen({ port, host: '0.0.0.0' }, (err, address) => {
       if (err) {
         console.error(err);
