@@ -8,13 +8,9 @@ pub mod types;
 mod test;
 
 use errors::ContractError;
-use types::{
-    AgentRecord, DataKey, ReceiptRecord, ServiceRecord, SystemStats,
-};
+use types::{AgentRecord, DataKey, ReceiptRecord, ServiceRecord, SystemStats};
 
-use soroban_sdk::{
-    contract, contractimpl, token, Address, BytesN, Env, String, Symbol,
-};
+use soroban_sdk::{contract, contractimpl, token, Address, BytesN, Env, String, Symbol};
 
 // 86,400 seconds represents a 24-hour rolling spend window on Stellar consensus
 const SECONDS_PER_DAY: u64 = 86_400;
@@ -86,7 +82,9 @@ impl AstrolabePayContract {
         };
 
         env.storage().persistent().set(&agent_key, &record);
-        env.storage().persistent().extend_ttl(&agent_key, 100_000, 500_000);
+        env.storage()
+            .persistent()
+            .extend_ttl(&agent_key, 100_000, 500_000);
 
         let mut stats: SystemStats = env
             .storage()
@@ -198,7 +196,11 @@ impl AstrolabePayContract {
 
         // 5. Update service stats if service exists
         let svc_key = DataKey::Service(service_id.clone());
-        if let Some(mut svc) = env.storage().persistent().get::<DataKey, ServiceRecord>(&svc_key) {
+        if let Some(mut svc) = env
+            .storage()
+            .persistent()
+            .get::<DataKey, ServiceRecord>(&svc_key)
+        {
             svc.total_calls += 1;
             env.storage().persistent().set(&svc_key, &svc);
         }
@@ -217,7 +219,9 @@ impl AstrolabePayContract {
         };
 
         env.storage().persistent().set(&receipt_key, &receipt);
-        env.storage().persistent().extend_ttl(&receipt_key, 100_000, 500_000);
+        env.storage()
+            .persistent()
+            .extend_ttl(&receipt_key, 100_000, 500_000);
 
         // 7. Update protocol stats
         let mut stats: SystemStats = env
@@ -230,7 +234,14 @@ impl AstrolabePayContract {
         env.storage().instance().set(&DataKey::Stats, &stats);
         env.storage().instance().extend_ttl(100_000, 500_000);
 
-        events::emit_payment_settled(&env, &agent, &recipient, &service_id, amount_stroops, &nonce);
+        events::emit_payment_settled(
+            &env,
+            &agent,
+            &recipient,
+            &service_id,
+            amount_stroops,
+            &nonce,
+        );
         Ok(receipt)
     }
 
@@ -269,7 +280,9 @@ impl AstrolabePayContract {
         };
 
         env.storage().persistent().set(&key, &service);
-        env.storage().persistent().extend_ttl(&key, 100_000, 500_000);
+        env.storage()
+            .persistent()
+            .extend_ttl(&key, 100_000, 500_000);
 
         let mut stats: SystemStats = env
             .storage()
@@ -334,7 +347,9 @@ impl AstrolabePayContract {
 
         env.storage().persistent().set(&key, &service);
         env.storage().persistent().set(&rated_key, &true);
-        env.storage().persistent().extend_ttl(&rated_key, 100_000, 500_000);
+        env.storage()
+            .persistent()
+            .extend_ttl(&rated_key, 100_000, 500_000);
 
         events::emit_trust_rated(&env, &service_id, &rater, score);
 
@@ -394,7 +409,11 @@ impl AstrolabePayContract {
     }
 
     /// Upgrade contract WASM executable (admin only)
-    pub fn upgrade(env: Env, admin: Address, new_wasm_hash: BytesN<32>) -> Result<(), ContractError> {
+    pub fn upgrade(
+        env: Env,
+        admin: Address,
+        new_wasm_hash: BytesN<32>,
+    ) -> Result<(), ContractError> {
         admin.require_auth();
         let stored_admin: Address = env
             .storage()
@@ -411,7 +430,11 @@ impl AstrolabePayContract {
     }
 
     /// Update admin address (current admin only)
-    pub fn set_admin(env: Env, current_admin: Address, new_admin: Address) -> Result<(), ContractError> {
+    pub fn set_admin(
+        env: Env,
+        current_admin: Address,
+        new_admin: Address,
+    ) -> Result<(), ContractError> {
         current_admin.require_auth();
         let stored_admin: Address = env
             .storage()

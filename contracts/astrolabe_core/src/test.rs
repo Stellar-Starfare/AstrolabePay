@@ -67,7 +67,8 @@ fn test_agent_registration_and_policy() {
     assert_eq!(client.check_agent_allowance(&agent, &150_000_000), false);
 
     // Duplicate registration should return AgentAlreadyRegistered
-    let dup_res = client.try_register_agent(&master, &agent, &100_000_000, &1_000_000_000, &agent_name);
+    let dup_res =
+        client.try_register_agent(&master, &agent, &100_000_000, &1_000_000_000, &agent_name);
     assert!(dup_res.is_err());
 }
 
@@ -97,7 +98,7 @@ fn test_settle_payment_and_replay_protection() {
     client.register_agent(
         &master,
         &agent,
-        &10_000_000, // 1 XLM daily
+        &10_000_000,  // 1 XLM daily
         &100_000_000, // 10 XLM lifetime
         &Symbol::new(&env, "bot_1"),
     );
@@ -184,19 +185,41 @@ fn test_timestamp_daily_spend_rollover() {
 
     // Spend 4 XLM
     let nonce1 = BytesN::from_array(&env, &[1u8; 32]);
-    client.settle_agent_payment(&agent, &recipient, &token.address, &40_000_000, &nonce1, &Symbol::new(&env, "svc"));
+    client.settle_agent_payment(
+        &agent,
+        &recipient,
+        &token.address,
+        &40_000_000,
+        &nonce1,
+        &Symbol::new(&env, "svc"),
+    );
 
     // Attempting to spend 2 XLM now exceeds remaining 1 XLM daily limit
     let nonce2 = BytesN::from_array(&env, &[2u8; 32]);
-    let fail_spend = client.try_settle_agent_payment(&agent, &recipient, &token.address, &20_000_000, &nonce2, &Symbol::new(&env, "svc"));
+    let fail_spend = client.try_settle_agent_payment(
+        &agent,
+        &recipient,
+        &token.address,
+        &20_000_000,
+        &nonce2,
+        &Symbol::new(&env, "svc"),
+    );
     assert!(fail_spend.is_err());
 
     // Advance ledger timestamp by 86,400 seconds (24 hours)
-    env.ledger().set_timestamp(env.ledger().timestamp() + 86_400);
+    env.ledger()
+        .set_timestamp(env.ledger().timestamp() + 86_400);
 
     // After 24-hour rollover, daily spend resets and 2 XLM spend succeeds
     let nonce3 = BytesN::from_array(&env, &[3u8; 32]);
-    let ok_spend = client.settle_agent_payment(&agent, &recipient, &token.address, &20_000_000, &nonce3, &Symbol::new(&env, "svc"));
+    let ok_spend = client.settle_agent_payment(
+        &agent,
+        &recipient,
+        &token.address,
+        &20_000_000,
+        &nonce3,
+        &Symbol::new(&env, "svc"),
+    );
     assert_eq!(ok_spend.amount_stroops, 20_000_000);
 
     let updated_agent = client.get_agent(&agent);
@@ -249,7 +272,8 @@ fn test_service_registration_and_verified_trust_rating() {
 
     // Unverified user attempting to rate without a receipt must be rejected
     let fake_nonce = BytesN::from_array(&env, &[88u8; 32]);
-    let unverified_res = client.try_rate_service_trust(&unverified_user, &service_id, &90, &fake_nonce);
+    let unverified_res =
+        client.try_rate_service_trust(&unverified_user, &service_id, &90, &fake_nonce);
     assert!(unverified_res.is_err());
 
     // Settle a verified payment

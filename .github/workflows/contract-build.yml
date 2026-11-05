@@ -22,12 +22,9 @@ jobs:
         with:
           targets: wasm32-unknown-unknown
 
-      - name: Install Stellar CLI
-        run: cargo install --locked stellar-cli --features opt
-
       - name: Build Contract WASM
         run: |
-          stellar contract build --manifest-path contracts/astrolabe_core/Cargo.toml
+          cargo build --target wasm32-unknown-unknown --release --manifest-path contracts/astrolabe_core/Cargo.toml
 
       - name: Verify WASM Output
         run: |
