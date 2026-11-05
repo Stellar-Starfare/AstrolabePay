@@ -281,12 +281,13 @@ impl AstrolabePayContract {
         Ok(())
     }
 
-    /// Rate an API provider's reliability (1 to 100) based on successful agent invocations
+    /// Rate an API provider's reliability (1 to 100) with cryptographic proof of settled payment
     pub fn rate_service_trust(
         env: Env,
         rater: Address,
         service_id: Symbol,
         score: u32,
+        receipt_nonce: BytesN<32>,
     ) -> Result<u32, ContractError> {
         rater.require_auth();
 
@@ -294,6 +295,31 @@ impl AstrolabePayContract {
             return Err(ContractError::InvalidTrustScore);
         }
 
+        // 1. Verify receipt existence
+        let receipt_key = DataKey::Receipt(receipt_nonce.clone());
+        let receipt: ReceiptRecord = env
+            .storage()
+            .persistent()
+            .get(&receipt_key)
+            .ok_or(ContractError::ReceiptNotFound)?;
+
+        // 2. Verify receipt matches target service
+        if receipt.service_id != service_id {
+            return Err(ContractError::Unauthorized);
+        }
+
+        // 3. Verify rater is the paying agent on the receipt
+        if receipt.agent != rater {
+            return Err(ContractError::UnverifiedRater);
+        }
+
+        // 4. Verify single rating per settled payment receipt
+        let rated_key = DataKey::Rated(receipt_nonce.clone());
+        if env.storage().persistent().has(&rated_key) {
+            return Err(ContractError::DuplicateNonce);
+        }
+
+        // 5. Update service trust score
         let key = DataKey::Service(service_id.clone());
         let mut service: ServiceRecord = env
             .storage()
@@ -305,6 +331,9 @@ impl AstrolabePayContract {
         service.trust_score_count += 1;
 
         env.storage().persistent().set(&key, &service);
+        env.storage().persistent().set(&rated_key, &true);
+        env.storage().persistent().extend_ttl(&rated_key, 100_000, 500_000);
+
         events::emit_trust_rated(&env, &service_id, &rater, score);
 
         let average = (service.trust_score_accum / service.trust_score_count as u64) as u32;

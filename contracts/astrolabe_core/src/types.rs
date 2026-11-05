@@ -11,6 +11,7 @@ pub enum DataKey {
     Service(Symbol),
     ServiceCount,
     Receipt(BytesN<32>),
+    Rated(BytesN<32>),
     Stats,
 }
 
