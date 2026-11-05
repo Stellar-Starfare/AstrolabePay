@@ -14,26 +14,41 @@ export interface SponsoredSettlementParams {
 export class FeeSponsoredRelayer {
   private server: rpc.Server;
   private networkPassphrase: string;
-  private sponsorKeypair: Keypair;
+  private sponsorKeypair?: Keypair;
   private contractId: string;
 
   constructor(
-    sponsorSecretKey: string = 'SCZEAKU3JHHO6MFEUYVDRD35367FXUP5GPF4DBXSX76DAZFHHTUYMUGG',
+    sponsorSecretKey?: string,
     rpcUrl: string = ASTROLABE_CONFIG.TESTNET.rpcUrl,
     contractId: string = ASTROLABE_CONFIG.TESTNET.contractId
   ) {
     this.server = new rpc.Server(rpcUrl);
     this.networkPassphrase = ASTROLABE_CONFIG.TESTNET.networkPassphrase;
-    this.sponsorKeypair = Keypair.fromSecret(sponsorSecretKey);
     this.contractId = contractId;
+
+    const key =
+      sponsorSecretKey ||
+      (typeof process !== 'undefined' && process.env?.STELLAR_FEE_SPONSOR_SECRET_KEY);
+    if (key) {
+      this.sponsorKeypair = Keypair.fromSecret(key);
+    }
   }
 
   async settleSponsoredPayment(params: SponsoredSettlementParams): Promise<{
     txHash: string;
     ledger: number;
   }> {
+    const key = params.sponsorSecretKey;
+    const sponsorKeypair = key ? Keypair.fromSecret(key) : this.sponsorKeypair;
+
+    if (!sponsorKeypair) {
+      throw new Error(
+        'FeeSponsoredRelayer: No fee sponsor key provided. Pass sponsorSecretKey to AstrolabeClient or set STELLAR_FEE_SPONSOR_SECRET_KEY in the environment.'
+      );
+    }
+
     // 1. Fee Sponsor is transaction source account paying the gas fees
-    const sponsorAccount = await this.server.getAccount(this.sponsorKeypair.publicKey());
+    const sponsorAccount = await this.server.getAccount(sponsorKeypair.publicKey());
     const contract = new Contract(this.contractId);
     const nonceBytes = Buffer.from(params.nonceHex, 'hex');
 
@@ -61,7 +76,7 @@ export class FeeSponsoredRelayer {
 
     // 4. Agent signs Soroban authorization entry; Sponsor signs network envelope
     prepared.sign(params.agentKeypair);
-    prepared.sign(this.sponsorKeypair);
+    prepared.sign(sponsorKeypair);
 
     const sendRes = await this.server.sendTransaction(prepared);
     if (sendRes.status === 'ERROR') {
