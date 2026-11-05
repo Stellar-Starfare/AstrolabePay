@@ -392,7 +392,8 @@ impl AstrolabePayContract {
             false
         }
     }
-}    /// Upgrade contract WASM executable (admin only)
+
+    /// Upgrade contract WASM executable (admin only)
     pub fn upgrade(env: Env, admin: Address, new_wasm_hash: BytesN<32>) -> Result<(), ContractError> {
         admin.require_auth();
         let stored_admin: Address = env
