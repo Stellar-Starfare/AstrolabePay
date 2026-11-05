@@ -1,12 +1,19 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
 import { request as undiciRequest } from 'undici';
+import crypto from 'crypto';
+import { Keypair } from '@stellar/stellar-sdk';
 import { PaymentReceipt, ASTROLABE_CONFIG } from '@astrolabe/sdk';
+
+export interface ForwarderOptions {
+  signerSecretKey?: string;
+}
 
 export async function forwardToOrigin(
   req: FastifyRequest,
   reply: FastifyReply,
   originUrl: string,
-  receipt: PaymentReceipt
+  receipt: PaymentReceipt,
+  options: ForwarderOptions = {}
 ): Promise<void> {
   const url = new URL(originUrl);
   const reqUrl = new URL(req.url, 'http://localhost');
@@ -31,16 +38,29 @@ export async function forwardToOrigin(
     }
   }
 
+  // Generate cryptographic Ed25519 signature over settlement receipt
+  const receiptJson = JSON.stringify(receipt);
+  let receiptSignature: string | undefined;
+  const signingKey =
+    options.signerSecretKey ||
+    (typeof process !== 'undefined' && process.env?.STELLAR_FEE_SPONSOR_SECRET_KEY);
+
+  if (signingKey) {
+    try {
+      const kp = Keypair.fromSecret(signingKey);
+      const digest = crypto.createHash('sha256').update(receiptJson).digest();
+      receiptSignature = kp.sign(digest).toString('hex');
+    } catch {
+      // Ignore signing error if key format invalid
+    }
+  }
+
   try {
     const upstreamRes = await undiciRequest(url.toString(), {
       method: req.method as any,
       headers: forwardHeaders,
       body: req.body ? JSON.stringify(req.body) : undefined,
     });
-
-    const isStreaming =
-      upstreamRes.headers['content-type']?.includes('text/event-stream') ||
-      upstreamRes.headers['transfer-encoding'] === 'chunked';
 
     for (const [key, value] of Object.entries(upstreamRes.headers)) {
       if (value && key !== 'content-length' && key !== 'connection') {
@@ -50,9 +70,12 @@ export async function forwardToOrigin(
 
     reply.raw.setHeader(
       ASTROLABE_CONFIG.HEADERS.PAYMENT_RESPONSE,
-      Buffer.from(JSON.stringify(receipt)).toString('base64')
+      Buffer.from(receiptJson).toString('base64')
     );
     reply.raw.setHeader('X-Astrolabe-Tx-Hash', receipt.txHash);
+    if (receiptSignature) {
+      reply.raw.setHeader('X-Astrolabe-Receipt-Signature', receiptSignature);
+    }
 
     reply.raw.statusCode = upstreamRes.statusCode;
 
