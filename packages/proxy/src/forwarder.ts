@@ -38,26 +38,40 @@ export async function forwardToOrigin(
       body: req.body ? JSON.stringify(req.body) : undefined,
     });
 
-    reply.status(upstreamRes.statusCode);
+    const isStreaming =
+      upstreamRes.headers['content-type']?.includes('text/event-stream') ||
+      upstreamRes.headers['transfer-encoding'] === 'chunked';
 
     for (const [key, value] of Object.entries(upstreamRes.headers)) {
-      if (value && key !== 'content-length' && key !== 'transfer-encoding') {
-        reply.header(key, value);
+      if (value && key !== 'content-length' && key !== 'connection') {
+        reply.raw.setHeader(key, value);
       }
     }
 
-    reply.header(
+    reply.raw.setHeader(
       ASTROLABE_CONFIG.HEADERS.PAYMENT_RESPONSE,
       Buffer.from(JSON.stringify(receipt)).toString('base64')
     );
+    reply.raw.setHeader('X-Astrolabe-Tx-Hash', receipt.txHash);
 
-    const bodyText = await upstreamRes.body.text();
-    reply.send(bodyText);
+    reply.raw.statusCode = upstreamRes.statusCode;
+
+    // True non-blocking chunked / SSE stream forwarding
+    if (upstreamRes.body) {
+      for await (const chunk of upstreamRes.body) {
+        reply.raw.write(chunk);
+      }
+      reply.raw.end();
+    } else {
+      reply.raw.end();
+    }
   } catch (err: any) {
-    reply.status(502).send({
-      error: 'Bad Gateway',
-      message: `Failed to reach upstream origin: ${err.message}`,
-      receipt,
-    });
+    if (!reply.raw.headersSent) {
+      reply.status(502).send({
+        error: 'Bad Gateway',
+        message: `Failed to reach upstream origin: ${err.message}`,
+        receipt,
+      });
+    }
   }
 }
