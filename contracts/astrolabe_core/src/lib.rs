@@ -64,7 +64,7 @@ impl AstrolabePayContract {
 
         let agent_key = DataKey::Agent(agent.clone());
         if env.storage().persistent().has(&agent_key) {
-            return Err(ContractError::DuplicateNonce);
+            return Err(ContractError::AgentAlreadyRegistered);
         }
 
         let current_ledger = env.ledger().sequence();
@@ -247,7 +247,7 @@ impl AstrolabePayContract {
 
         let key = DataKey::Service(service_id.clone());
         if env.storage().persistent().has(&key) {
-            return Err(ContractError::DuplicateNonce);
+            return Err(ContractError::ServiceAlreadyRegistered);
         }
 
         let service = ServiceRecord {
@@ -331,7 +331,7 @@ impl AstrolabePayContract {
         env.storage()
             .persistent()
             .get(&key)
-            .ok_or(ContractError::DuplicateNonce)
+            .ok_or(ContractError::ReceiptNotFound)
     }
 
     pub fn get_stats(env: Env) -> SystemStats {

@@ -16,4 +16,8 @@ pub enum ContractError {
     ServiceInactive = 10,
     InvalidAmount = 11,
     InvalidTrustScore = 12,
+    ReceiptNotFound = 13,
+    AgentAlreadyRegistered = 14,
+    ServiceAlreadyRegistered = 15,
+    UnverifiedRater = 16,
 }
