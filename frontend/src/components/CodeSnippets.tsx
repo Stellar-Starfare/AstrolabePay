@@ -15,26 +15,23 @@ const client = new AstrolabeClient({
   contractId: '${CONTRACT_ID}',
   agentSecretKey: process.env.STELLAR_AGENT_SECRET!,
   policy: {
-    dailyBudget: 25.0,    // 25 XLM / 24hrs
-    maxPerCall: 0.50,     // 0.50 XLM max per HTTP 402 request
+    dailyBudgetStroops: 250_000_000n, // 25 XLM / 24hrs
+    maxAmountPerRequestStroops: 5_000_000n, // 0.50 XLM max per HTTP 402 request
     allowedHosts: ['proxy.astrolabe.stellar.network']
-  },
-  relayerUrl: 'https://proxy.astrolabe.stellar.network'
+  }
 });
 
 // Autonomous request: Automatically intercepts HTTP 402,
 // checks spend policy, obtains fee sponsorship, settles on Soroban,
-// and resolves verified data payload!
-const response = await client.fetch('https://proxy.astrolabe.stellar.network/v1/deepseek', {
+// and returns verified data payload!
+const data = await client.request('https://proxy.astrolabe.stellar.network/v1/deepseek', {
   method: 'POST',
-  body: JSON.stringify({
+  body: {
     prompt: 'Synthesize optimal cross-chain swap routing between XLM and EURC'
-  })
+  }
 });
 
-const data = await response.json();
-console.log('Result:', data);
-console.log('Soroban Tx:', response.headers.get('x-astrolabe-tx-hash'));`,
+console.log('Result:', data);`,
 
     langchain: `import { createAstrolabeLangChainTool, AstrolabeClient } from '@astrolabe/sdk';
 import { initializeAgentExecutorWithOptions } from 'langchain/agents';
@@ -43,7 +40,7 @@ import { ChatOpenAI } from '@langchain/openai';
 const client = new AstrolabeClient({
   contractId: '${CONTRACT_ID}',
   agentSecretKey: process.env.STELLAR_AGENT_SECRET!,
-  policy: { dailyBudget: 50.0, maxPerCall: 1.0 }
+  policy: { dailyBudgetStroops: 500_000_000n }
 });
 
 // Provide autonomous agent with paid capability tool
@@ -61,7 +58,8 @@ const executor = await initializeAgentExecutorWithOptions([deepseekTool], model,
 // Agent autonomously pays per invocation through AstrolabePay!
 const result = await executor.run(
   'Query the DeepSeek reasoner for mathematically sound yield farming formulas.'
-);`,
+);
+console.log('Agent Execution:', result);`,
 
     openai: `import { createAstrolabeOpenAITool, AstrolabeClient } from '@astrolabe/sdk';
 import OpenAI from 'openai';
@@ -84,7 +82,7 @@ const completion = await openai.chat.completions.create({
   tools: [astrolabeTool.definition]
 });
 
-// If OpenAI calls the tool, execute the settlement hook:
+// If OpenAI calls the tool, execute the settlement handler:
 if (completion.choices[0].message.tool_calls) {
   const toolCall = completion.choices[0].message.tool_calls[0];
   const responseData = await astrolabeTool.execute(JSON.parse(toolCall.function.arguments));
@@ -92,42 +90,31 @@ if (completion.choices[0].message.tool_calls) {
 }`,
 
     python: `import os
+import json
 import requests
 from stellar_sdk import Keypair, Server
 
-# 1. Dispatch request
+# 1. Dispatch request to protected x402 endpoint
 url = "https://proxy.astrolabe.stellar.network/v1/deepseek"
 resp = requests.post(url, json={"prompt": "Run simulation"})
 
-# 2. Handle HTTP 402 Challenge
+# 2. Check if HTTP 402 Payment Required challenge returned
 if resp.status_code == 402:
-    challenge = resp.json()["challenge"]
-    cost = challenge["cost"]
-    payee = challenge["payee"]
-    nonce = challenge["nonce"]
-    
-    # 3. Request fee-bump sponsorship & sign Soroban auth
-    # Contract: ${CONTRACT_ID}
-    print(f"Challenged: {cost} XLM to {payee}")
-    # Submit payment and retry with Authorization: Astrolabe-Receipt <hash>`,
+    challenge = resp.json()
+    nonce = challenge["accepts"][0]["nonce"]
+    print(f"402 Challenge Nonce: {nonce}")
+    # Settle payment with agent secret key on Soroban and retry with x-stellar-payment header`,
 
-    curl: `# 1. Initial invocation (Protected endpoint returns HTTP 402)
+    curl: `# 1. Send initial request (will be challenged with HTTP 402 Payment Required)
 curl -i -X POST https://proxy.astrolabe.stellar.network/v1/deepseek \\
   -H "Content-Type: application/json" \\
-  -d '{"prompt": "Generate market analysis"}'
+  -d '{"prompt": "Calculate optimal AMM arbitrage routes"}'
 
-# Output:
-# HTTP/1.1 402 Payment Required
-# X-Astrolabe-Contract: ${CONTRACT_ID}
-# X-Astrolabe-Cost: 0.05
-# X-Astrolabe-Asset: XLM
-# X-Astrolabe-Nonce: ast_9b7351a5434e
-
-# 2. Fulfill with settled Stellar Transaction Hash
+# 2. Re-send with settled x-stellar-payment header
 curl -i -X POST https://proxy.astrolabe.stellar.network/v1/deepseek \\
   -H "Content-Type: application/json" \\
-  -H "X-Astrolabe-Tx-Hash: 9b7351a5434e40dd1e572662c430bb796c42d8205aa18653b629802856647fe7" \\
-  -d '{"prompt": "Generate market analysis"}'`
+  -H "x-stellar-payment: <BASE64_ENCODED_PAYMENT_PAYLOAD>" \\
+  -d '{"prompt": "Calculate optimal AMM arbitrage routes"}'`
   };
 
   const handleCopy = () => {
@@ -140,55 +127,63 @@ curl -i -X POST https://proxy.astrolabe.stellar.network/v1/deepseek \\
     <div className="glass-panel" style={{ padding: '1.5rem' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.75rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
-          <FileCode color="var(--gold-400)" size={22} />
+          <Code2 color="var(--gold-400)" size={22} />
           <div>
-            <h2 className="font-heading" style={{ fontSize: '1.2rem', color: '#ffffff' }}>
-              Autonomous Agent Integration SDK
+            <h2 className="font-heading" style={{ fontSize: '1.15rem', color: '#ffffff' }}>
+              Multi-Language Agent Integration Code
             </h2>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.82rem' }}>
-              Zero-friction client libraries for Node.js, LangChain, OpenAI Agents, AutoGPT, and Python.
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
+              Copy drop-in code snippets for LangChain, OpenAI Function Calling, TypeScript SDK, Python, and cURL.
             </p>
           </div>
         </div>
 
-        <button onClick={handleCopy} className="btn-outline" style={{ padding: '0.45rem 0.85rem' }}>
+        <button onClick={handleCopy} className="btn-ghost" style={{ fontSize: '0.8rem' }}>
           {copied ? <Check size={14} color="var(--emerald-400)" /> : <Copy size={14} />}
           <span>{copied ? 'Copied to Clipboard' : 'Copy Code'}</span>
         </button>
       </div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: '0.25rem', borderBottom: '1px solid var(--border-subtle)', marginBottom: '1rem', overflowX: 'auto' }}>
+      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '0.75rem', overflowX: 'auto' }}>
         {[
-          { id: 'ts', label: 'TypeScript / Node.js' },
+          { id: 'ts', label: 'TypeScript SDK' },
           { id: 'langchain', label: 'LangChain Tool' },
-          { id: 'openai', label: 'OpenAI Agent Tool' },
-          { id: 'python', label: 'Python Requests' },
-          { id: 'curl', label: 'cURL & Raw HTTP' },
-        ].map(t => (
+          { id: 'openai', label: 'OpenAI Functions' },
+          { id: 'python', label: 'Python' },
+          { id: 'curl', label: 'cURL CLI' }
+        ].map((t) => (
           <button
             key={t.id}
             onClick={() => setActiveTab(t.id as any)}
-            className={`nav-tab ${activeTab === t.id ? 'active' : ''}`}
-            style={{ fontSize: '0.82rem', padding: '0.5rem 0.85rem' }}
+            style={{
+              background: activeTab === t.id ? 'rgba(245, 158, 11, 0.15)' : 'transparent',
+              color: activeTab === t.id ? 'var(--gold-400)' : 'var(--text-secondary)',
+              border: `1px solid ${activeTab === t.id ? 'rgba(245, 158, 11, 0.4)' : 'transparent'}`,
+              borderRadius: '6px',
+              padding: '0.4rem 0.8rem',
+              fontSize: '0.8rem',
+              fontWeight: 500,
+              cursor: 'pointer',
+              whiteSpace: 'nowrap'
+            }}
           >
             {t.label}
           </button>
         ))}
       </div>
 
-      {/* Code Editor view */}
+      {/* Code Block */}
       <pre style={{
         background: '#040714',
+        border: '1px solid var(--border-subtle)',
         borderRadius: '8px',
         padding: '1.25rem',
-        color: '#e2e8f0',
-        fontFamily: 'var(--font-mono)',
         fontSize: '0.8rem',
-        lineHeight: '1.6',
+        color: '#e2e8f0',
+        lineHeight: '1.5',
         overflowX: 'auto',
-        border: '1px solid var(--border-subtle)',
-        maxHeight: '440px'
+        fontFamily: 'var(--font-mono)'
       }}>
         <code>{snippets[activeTab]}</code>
       </pre>
