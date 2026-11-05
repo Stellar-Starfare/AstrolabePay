@@ -1,0 +1,55 @@
+name: Continuous Integration
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  contracts:
+    name: Soroban Smart Contracts Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: contracts/astrolabe_core
+
+      - name: Run Cargo Tests
+        run: cargo test --manifest-path contracts/astrolabe_core/Cargo.toml --verbose
+
+      - name: Check Formatting & Clippy
+        run: |
+          cargo fmt --manifest-path contracts/astrolabe_core/Cargo.toml -- --check
+          cargo clippy --manifest-path contracts/astrolabe_core/Cargo.toml -- -D warnings
+
+  node-monorepo:
+    name: Monorepo Build & Typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Monorepo Build
+        run: npm run build
+
+      - name: Frontend Build Verification
+        run: npm run build:frontend

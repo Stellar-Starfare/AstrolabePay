@@ -1,0 +1,35 @@
+name: Build & Verify Soroban WASM
+
+on:
+  push:
+    paths:
+      - 'contracts/**'
+      - '.github/workflows/contract-build.yml'
+  pull_request:
+    paths:
+      - 'contracts/**'
+
+jobs:
+  wasm-build:
+    name: Compile WASM Bytecode
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Install Stellar CLI
+        run: cargo install --locked stellar-cli --features opt
+
+      - name: Build Contract WASM
+        run: |
+          stellar contract build --manifest-path contracts/astrolabe_core/Cargo.toml
+
+      - name: Verify WASM Output
+        run: |
+          test -f contracts/astrolabe_core/target/wasm32-unknown-unknown/release/astrolabe_core.wasm
+          echo "WASM compilation verified successfully."

@@ -1,0 +1,45 @@
+name: Bug Report
+description: File a bug report to help improve AstrolabePay
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for taking the time to report an issue!
+  - type: dropdown
+    id: component
+    attributes:
+      label: Affected Component
+      options:
+        - Smart Contracts (contracts/astrolabe_core)
+        - SDK (@astrolabe/sdk)
+        - Edge Reverse Proxy (@astrolabe/proxy)
+        - CLI (@astrolabe/cli)
+        - Frontend Dashboard
+        - Documentation / Other
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Describe the Bug
+      description: A clear and concise description of what the bug is.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce
+      description: Steps to reproduce the behavior.
+      placeholder: |
+        1. Go to '...'
+        2. Run command '...'
+        3. See error
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: A clear description of what you expected to happen.
+    validations:
+      required: true
