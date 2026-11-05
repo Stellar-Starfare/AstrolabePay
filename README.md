@@ -2,10 +2,11 @@
 
 > **The Autonomous Navigational Payment Engine & Edge x402 Reverse Proxy for AI Agents on Stellar Soroban.**
 
-[![Stellar Soroban](https://img.shields.io/badge/Stellar-Soroban_v22.0-blue.svg)](https://stellar.org)
+[![Stellar Soroban](https://img.shields.io/badge/Stellar-Soroban_Protocol_22-blue.svg)](https://stellar.org)
 [![Rust](https://img.shields.io/badge/Smart_Contract-Rust_WASM-orange.svg)](https://www.rust-lang.org/)
 [![TypeScript](https://img.shields.io/badge/SDK-TypeScript_5.4-3178c6.svg)](https://www.typescriptlang.org/)
 [![License](https://img.shields.io/badge/License-Apache_2.0-green.svg)](LICENSE)
+[![CI](https://github.com/Stellar-Starfare/AstrolabePay/actions/workflows/ci.yml/badge.svg)](https://github.com/Stellar-Starfare/AstrolabePay/actions/workflows/ci.yml)
 [![Testnet Deployed](https://img.shields.io/badge/Testnet-CCPRAZ5DW7...V36K-brightgreen.svg)](https://stellar.expert/explorer/testnet/contract/CCPRAZ5DW774LI5DRLIOII7TDWJRRPJLKWSLH6CDAV5MFLCIPVJDV36K)
 
 ---
@@ -23,6 +24,7 @@
 - [10. Frontend Dashboard & Live Simulator](#10-frontend-dashboard--live-simulator)
 - [11. Vercel Deployment Guide](#11-vercel-deployment-guide)
 - [12. Quickstart & Verification](#12-quickstart--verification)
+- [13. Contributing & Community Guidelines](#13-contributing--community-guidelines)
 
 ---
 
@@ -35,9 +37,10 @@ Autonomous AI agents (such as LangChain, AutoGPT, and CrewAI pipelines) require 
 
 **AstrolabePay** solves these fundamental issues on **Stellar Soroban**:
 - **HTTP 402 Payment Required Standard**: Transparently intercepts paid endpoints, queries fees, and fulfills micropayments per call.
-- **On-Chain Spend Policy Verification**: Daily rolling spend allowances and per-call caps are enforced directly in Soroban smart contracts, guaranteeing tamper-proof budget governance.
+- **On-Chain Spend Policy Verification**: Daily rolling spend allowances (enforced over 86,400s consensus timestamps) and per-call caps are enforced directly in Soroban smart contracts, guaranteeing tamper-proof budget governance.
 - **Native Fee-Bump Relayer Sponsorship**: Sub-agents sign only their intent; the relayer sponsors the Stellar network transaction fee, meaning agents never need gas reserves.
 - **Cryptographic Replay Defense**: Nonce hash-locking prevents double-charging and replay attacks across distributed networks.
+- **Verified Trust Network**: API provider reputation scoring requires cryptographic proof of settled on-chain payment receipts, eliminating Sybil manipulation.
 
 ---
 
@@ -50,15 +53,13 @@ We conducted a comprehensive architectural review of the reference project [`Vih
 |---|---|---|
 | **Base Blockchain** | Algorand AVM / PyTeal | **Stellar Soroban (Rust WASM, Protocol 22)** |
 | **Gas Fee Sponsorship** | None. Agents must maintain separate ALGO balances to pay transaction fees. | **Native Stellar Fee-Bump Envelopes**. Relayer sponsors 100% of network fees. Zero gas friction. |
-| **Spend Governance** | Hardcoded in local JSON files. Easily bypassed if process restarts or crashes. | **On-Chain Soroban Smart Contract**. Immutable daily budget caps and per-call allowances enforced by consensus. |
+| **Spend Governance** | Hardcoded in local JSON files. Easily bypassed if process restarts or crashes. | **On-Chain Soroban Smart Contract**. Immutable daily budget caps (86,400s rolling window) enforced by consensus. |
 | **Replay Protection** | Weak timestamp windowing. Susceptible to replay attacks during clock drift. | **Cryptographic Nonce Hash-Locking** + on-chain claim registry preventing duplicate claims. |
+| **Trust Rating Integrity** | Unauthenticated user reviews. Susceptible to Sybil attacks. | **Verified Receipt Proof-of-Payment**. Ratings strictly require on-chain settled receipt nonces. |
 | **Multi-Agent Scale** | Single monolithic seed phrase. | **Hierarchical Deterministic Sub-Agent Fleet** with isolated keys and individual budget allocations. |
 | **AI Tool Primitives** | Manual cURL / generic fetch wrappers. | **Native LangChain Tools**, **OpenAI Function Calling**, and AutoGPT adapters. |
-| **Proxy Architecture** | Mock server without streaming or backpressure. | **Fastify Edge Proxy** with Server-Sent Events (SSE) streaming and receipt verification. |
+| **Proxy Architecture** | Mock server without streaming or backpressure. | **Fastify Edge Proxy** with chunked streaming and cryptographic Ed25519 receipt verification. |
 | **Settlement Currency** | ALGO only. | **XLM, USDC, EURC**, and any custom issued asset on Stellar. |
-
-### Architectural Conclusion
-SwyftPay provided a preliminary script demonstration, but could not survive an adversarial or enterprise autonomous deployment. **AstrolabePay re-engineers the entire stack from the ground up**, establishing an industrial-grade, audited, and verifiable payment foundation specifically tailored to Stellar's sub-second finality and fee-bump mechanics.
 
 ---
 
@@ -90,14 +91,14 @@ Autonomous sub-agents run in isolated environments without user interaction. If 
 
 ### 2. Immutable On-Chain Spend Policy Guard
 Unlike local JSON allowances that can be reset or lost upon pod reboot, AstrolabePay stores policy parameters in contract state:
-- `daily_budget`: Maximum expenditure permitted within a 24-hour rolling window (measured in ledger sequence timestamps).
-- `spent_today`: Real-time on-chain tally that resets automatically when `current_ledger_time - window_start >= 86,400`.
-- `max_per_call`: Ceiling for any single HTTP 402 request.
+- `daily_limit_stroops`: Maximum expenditure permitted within an 86,400-second rolling consensus window.
+- `spent_today_stroops`: Real-time on-chain tally that resets automatically when `current_ledger_time - last_spend_timestamp >= 86,400`.
+- `total_limit_stroops`: Lifetime spend ceiling for the delegated sub-agent.
 
-If an autonomous sub-agent enters an infinite recursion loop, the Soroban contract throws `ContractError::DailyBudgetExceeded` and halts billing immediately.
+If an autonomous sub-agent enters an infinite recursion loop, the Soroban contract throws `ContractError::DailyLimitExceeded` and halts billing immediately.
 
 ### 3. Cryptographic Nonce Idempotency & Replay Protection
-Each 402 challenge generates a unique challenge nonce: `nonce = H(agent_id || service_id || timestamp || salt)`. When the payment settles, the contract records the hash in `ClaimedNonce(nonce)`. Any attempt to replay an old transaction returns `ContractError::NonceAlreadyClaimed`.
+Each 402 challenge generates a unique challenge nonce: `nonce = H(agent_id || service_id || timestamp || salt)`. When the payment settles, the contract records the hash in `Receipt(nonce)`. Any attempt to replay an old transaction returns `ContractError::DuplicateNonce`.
 
 ---
 
@@ -117,15 +118,15 @@ sequenceDiagram
     Proxy-->>SDK: HTTP 402 Payment Required (Challenge Nonce & Cost)
     SDK->>SDK: Verify Local Policy Guard (dailyBudget & maxPerCall)
     SDK->>Relayer: Request Fee-Bump Wrap (Agent Signed Auth)
-    Relayer->>Soroban: Submit SettlePayment(agent, service, cost, nonce)
-    Soroban->>Soroban: Check Allowance & Update spent_today
-    Soroban-->>Relayer: Tx Confirmed (Emits AgentPaymentSettled)
+    Relayer->>Soroban: Submit SettleAgentPayment(agent, recipient, token, amount, nonce, serviceId)
+    Soroban->>Soroban: Check Allowance & Update spent_today (86,400s rolling window)
+    Soroban-->>Relayer: Tx Confirmed (Emits PaymentSettled Event)
     Relayer-->>SDK: Return Tx Hash & Receipt
-    SDK->>Proxy: Retry POST with X-Astrolabe-Tx-Hash
-    Proxy->>Soroban: Verify Tx & Payment Settlement
+    SDK->>Proxy: Retry POST with X-Stellar-Payment
+    Proxy->>Soroban: Verify On-Chain Receipt (get_receipt) & Tx Status
     Proxy->>Upstream: Forward Verified Request
-    Upstream-->>Proxy: Stream Inference Tokens (SSE)
-    Proxy-->>Agent: 200 OK + Data Stream + Signed Receipt
+    Upstream-->>Proxy: Stream Inference Tokens (SSE / Chunked)
+    Proxy-->>Agent: 200 OK + Data Stream + Signed Receipt Header
 ```
 
 ---
@@ -141,26 +142,27 @@ AstrolabePay/
 │       │   ├── types.rs         # Storage keys, structs, and data types
 │       │   ├── errors.rs        # ContractError enum taxonomy
 │       │   ├── events.rs        # Telemetry event emitters
-│       │   └── test.rs          # 4 unit & integration tests (100% passing)
-│       └── Cargo.toml           # Soroban SDK v22 / Rust workspace
+│       │   └── test.rs          # Unit & integration tests (100% passing)
+│       └── Cargo.toml           # Soroban SDK v21 / Rust workspace
 ├── packages/
 │   ├── sdk/                     # Autonomous AI Agent Client SDK
 │   │   ├── src/
-│   │   │   ├── client.ts        # AstrolabeClient with 402 interception
+│   │   │   ├── client.ts        # AstrolabeClient with 402 interception & on-chain allowance sync
 │   │   │   ├── policy.ts        # SpendPolicyEngine (daily limits & allowlists)
 │   │   │   ├── agent-wallet.ts  # Hierarchical agent key derivation
-│   │   │   ├── relayer.ts       # Fee-sponsored fee-bump relayer client
+│   │   │   ├── relayer.ts       # Secure fee-sponsored fee-bump relayer client
 │   │   │   ├── trust.ts         # Provider SLA and uptime scoring
 │   │   │   ├── retry.ts         # Exponential backoff with payment-loop guard
-│   │   │   ├── adapters.ts      # LangChain & OpenAI Tool definitions
+│   │   │   ├── adapters.ts      # createAstrolabeLangChainTool & createAstrolabeOpenAITool
 │   │   │   └── types.ts         # TypeScript interfaces & challenge schemas
+│   │   ├── test/                # Unit test suite for policy, wallet, and adapters
 │   │   └── package.json
 │   ├── proxy/                   # Astrolabe Edge Reverse Proxy
 │   │   ├── src/
-│   │   │   ├── server.ts        # Fastify server with rate limiting & CORS
+│   │   │   ├── server.ts        # Fastify server with rate limiting & dynamic routing
 │   │   │   ├── interceptor.ts   # HTTP 402 Challenge generator
-│   │   │   ├── verifier.ts      # On-chain Soroban payment verifier
-│   │   │   └── forwarder.ts     # Upstream token streaming & receipt injection
+│   │   │   ├── verifier.ts      # On-chain Soroban payment verifier with receipt checks
+│   │   │   └── forwarder.ts     # Chunked token streaming & Ed25519 signed receipts
 │   │   └── package.json
 │   └── cli/                     # Developer Terminal CLI
 │       ├── src/bin.ts           # balance, fetch, agent:create, serve commands
@@ -169,22 +171,33 @@ AstrolabePay/
 │   ├── src/
 │   │   ├── components/
 │   │   │   ├── Navbar.tsx       # Live testnet status badge & wallet connect
-│   │   │   ├── AgentSimulator.tsx # Real-time 402 payment execution playground
+│   │   │   ├── AgentSimulator.tsx # Real-time 402 payment execution playground with Soroban RPC
 │   │   │   ├── AgentManager.tsx # Sub-agent keypair and spend policy manager
 │   │   │   ├── ProviderRegistry.tsx # Paid service marketplace & trust ratings
-│   │   │   ├── CodeSnippets.tsx # Multi-framework SDK code generator
+│   │   │   ├── CodeSnippets.tsx # Synchronized multi-framework SDK code generator
 │   │   │   ├── ArchitectureView.tsx # SwyftPay vs AstrolabePay comparison
-│   │   │   ├── WalletModal.tsx  # Keypair manager & funded dev account
+│   │   │   ├── WalletModal.tsx  # Keypair manager & Freighter wallet connect
 │   │   │   └── FaucetModal.tsx  # 1-click Friendbot 10,000 XLM faucet
 │   │   ├── lib/stellar.ts       # Horizon & Soroban RPC helper functions
 │   │   ├── index.css            # Celestial cyber design system & Orbitron fonts
 │   │   ├── App.tsx              # Main dashboard view with metrics bar
 │   │   └── main.tsx
 │   ├── index.html
-│   ├── vercel.json
 │   └── package.json
-├── vercel.json                  # Root Vercel deployment manifest
-├── DEPLOYMENT_VERCEL.md         # Vercel setup and configuration guide
+├── .github/
+│   ├── workflows/               # CI/CD automated test & build workflows
+│   ├── ISSUE_TEMPLATE/          # Structured issue templates for contributors
+│   └── PULL_REQUEST_TEMPLATE.md # Contributor PR checklist
+├── scripts/
+│   ├── build-contracts.sh       # POSIX cross-platform build script
+│   ├── deploy-contracts.sh      # POSIX cross-platform deploy script
+│   ├── build-contracts.ps1      # PowerShell build script
+│   └── deploy-contracts.ps1     # PowerShell deploy script
+├── Makefile                     # Contributor task runner (make build, make test, etc.)
+├── LICENSE                      # Official Apache-2.0 License
+├── CONTRIBUTING.md              # Contributor onboarding & PR guidelines
+├── CODE_OF_CONDUCT.md           # Contributor Covenant v2.1
+├── SECURITY.md                  # Responsible vulnerability disclosure policy
 ├── package.json                 # Monorepo workspaces manifest
 └── README.md                    # Master documentation
 ```
@@ -198,28 +211,34 @@ The core contract (`contracts/astrolabe_core`) is written in Rust targeting WebA
 ### Public ABI Methods
 ```rust
 pub trait AstrolabeContractTrait {
-    fn init(env: Env, admin: Address, base_relayer: Address) -> Result<(), ContractError>;
-    fn register_service(env: Env, service_id: Symbol, provider: Address, cost_per_call: i128, asset: Address) -> Result<(), ContractError>;
-    fn update_trust_score(env: Env, caller: Address, service_id: Symbol, new_score: u32) -> Result<(), ContractError>;
-    fn register_agent(env: Env, caller: Address, agent_id: Symbol, agent_address: Address, daily_budget: i128, max_per_call: i128) -> Result<(), ContractError>;
-    fn update_agent_policy(env: Env, caller: Address, agent_id: Symbol, new_daily_budget: i128, new_max_per_call: i128) -> Result<(), ContractError>;
-    fn settle_payment(env: Env, agent_id: Symbol, service_id: Symbol, amount: i128, nonce: BytesN<32>) -> Result<(), ContractError>;
-    fn get_agent_policy(env: Env, agent_id: Symbol) -> Result<AgentSpendPolicy, ContractError>;
-    fn get_service(env: Env, service_id: Symbol) -> Result<ServiceInfo, ContractError>;
-    fn get_stats(env: Env) -> ProtocolStats;
+    fn initialize(env: Env, admin: Address, treasury: Address, sponsor: Address) -> Result<(), ContractError>;
+    fn register_agent(env: Env, master: Address, agent: Address, daily_limit_stroops: i128, total_limit_stroops: i128, name: Symbol) -> Result<(), ContractError>;
+    fn update_agent_policy(env: Env, master: Address, agent: Address, daily_limit_stroops: i128, total_limit_stroops: i128, active: bool) -> Result<(), ContractError>;
+    fn settle_agent_payment(env: Env, agent: Address, recipient: Address, token: Address, amount_stroops: i128, nonce: BytesN<32>, service_id: Symbol) -> Result<ReceiptRecord, ContractError>;
+    fn register_api_provider(env: Env, provider: Address, service_id: Symbol, name: String, price_stroops: i128, token: Address, origin_hash: BytesN<32>) -> Result<(), ContractError>;
+    fn rate_service_trust(env: Env, rater: Address, service_id: Symbol, score: u32, receipt_nonce: BytesN<32>) -> Result<u32, ContractError>;
+    fn set_admin(env: Env, current_admin: Address, new_admin: Address) -> Result<(), ContractError>;
+    fn upgrade(env: Env, admin: Address, new_wasm_hash: BytesN<32>) -> Result<(), ContractError>;
+    fn get_agent(env: Env, agent: Address) -> Result<AgentRecord, ContractError>;
+    fn get_service(env: Env, service_id: Symbol) -> Result<ServiceRecord, ContractError>;
+    fn get_receipt(env: Env, nonce: BytesN<32>) -> Result<ReceiptRecord, ContractError>;
+    fn get_stats(env: Env) -> SystemStats;
+    fn check_agent_allowance(env: Env, agent: Address, amount_stroops: i128) -> bool;
 }
 ```
 
 ### Passing Test Suite
 ```bash
 $ cargo test --manifest-path contracts/astrolabe_core/Cargo.toml
-running 4 tests
+running 6 tests
 test test::test_initialization ... ok
-test test::test_service_registration_and_trust_rating ... ok
+test test::test_admin_governance ... ok
 test test::test_agent_registration_and_policy ... ok
+test test::test_service_registration_and_verified_trust_rating ... ok
 test test::test_settle_payment_and_replay_protection ... ok
+test test::test_timestamp_daily_spend_rollover ... ok
 
-test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.34s
 ```
 
 ---
@@ -238,7 +257,10 @@ const client = new AstrolabeClient({
   network: 'testnet',
   contractId: 'CCPRAZ5DW774LI5DRLIOII7TDWJRRPJLKWSLH6CDAV5MFLCIPVJDV36K',
   agentSecretKey: process.env.STELLAR_AGENT_SECRET!,
-  policy: { dailyBudget: 50.0, maxPerCall: 0.50 }
+  policy: {
+    dailyBudgetStroops: 500_000_000n, // 50 XLM
+    maxAmountPerRequestStroops: 5_000_000n // 0.50 XLM
+  }
 });
 
 const reasoningTool = createAstrolabeLangChainTool(client, {
@@ -285,16 +307,16 @@ const completion = await openai.chat.completions.create({
 
 The Astrolabe Edge Proxy (`packages/proxy`) wraps proprietary AI microservices and enforces payment:
 - **HTTP 402 Generation**: Returns standardized challenge payloads containing cost, asset code, payee address, and cryptographic nonce.
-- **On-Chain Settlement Verification**: Queries Soroban RPC nodes to verify transaction finality before releasing upstream data.
-- **Server-Sent Events (SSE) Streaming**: Supports real-time LLM token streams without buffering delays.
-- **Receipt Injection**: Emits cryptographically signed `X-Astrolabe-Receipt` headers for verifiable accounting.
+- **On-Chain Settlement Verification**: Queries Soroban RPC nodes to verify `get_receipt` and transaction finality before releasing upstream data.
+- **Chunked Token Streaming**: Supports real-time LLM token streams without buffering delays.
+- **Cryptographic Ed25519 Receipt Injection**: Emits signed `X-Astrolabe-Receipt-Signature` headers for verifiable accounting.
 
 ---
 
 ## 10. Frontend Dashboard & Live Simulator
 
 The React 18 + Vite frontend provides an interactive control center for autonomous AI agent finances:
-1. **Live Agent 402 Simulator**: Trigger mock AI reasoning calls, inspect HTTP 402 challenges, observe fee-bump sponsorship in real time, and view on-chain settlement receipts.
+1. **Live Agent 402 Simulator**: Trigger AI reasoning calls, inspect HTTP 402 challenges, observe fee-bump sponsorship in real time with live Soroban RPC telemetry, and view on-chain settlement receipts.
 2. **Sub-Agent Fleet Manager**: Provision cryptographic keypairs for sub-agents, allocate daily XLM spend limits, and monitor remaining allowances.
 3. **API Provider Registry**: Browse registered paid endpoints, inspect SLA uptime, trust scores, and register new API services.
 4. **Interactive Code Generator**: Instant code examples for TypeScript, LangChain, OpenAI Tools, Python Requests, and raw cURL.
@@ -328,19 +350,27 @@ AstrolabePay is optimized for deployment to Vercel:
 ### Build & Test Contracts
 ```bash
 # Build WebAssembly contract
-stellar contract build --manifest-path contracts/astrolabe_core/Cargo.toml
+npm run build:contracts
 
-# Run integration tests
-cargo test --manifest-path contracts/astrolabe_core/Cargo.toml
+# Run integration tests (100% passing)
+npm run test:contracts
 ```
 
 ### Run Frontend Locally
 ```bash
-cd frontend
-npm install
-npm run dev
+npm run dev:frontend
 # Open http://localhost:5173
 ```
+
+---
+
+## 13. Contributing & Community Guidelines
+
+We welcome pull requests and issue contributions from the open-source community!
+
+- Review our [Contributing Guide](CONTRIBUTING.md) for local development instructions and PR workflows.
+- Review our [Code of Conduct](CODE_OF_CONDUCT.md).
+- To report security vulnerabilities, consult our [Security Policy](SECURITY.md).
 
 ---
 
