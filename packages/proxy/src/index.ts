@@ -8,7 +8,7 @@ export * from './forwarder';
 if (require.main === module) {
   const port = Number(process.env.PORT) || 4022;
   const host = process.env.HOST || '0.0.0.0';
-  const server = buildAstrolabeProxy(port, host);
+  const server = buildAstrolabeProxy({ port, host });
 
   server.listen({ port, host }, (err, address) => {
     if (err) {

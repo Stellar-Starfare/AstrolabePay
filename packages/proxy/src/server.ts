@@ -19,7 +19,15 @@ export const DEFAULT_SERVICE_ORIGINS: Record<string, string> = {
   solidity_verifier: process.env.UPSTREAM_VERIFIER_URL || 'https://httpbin.org/post',
 };
 
-export function buildAstrolabeProxy(options: ProxyServerOptions = {}): FastifyInstance {
+export function buildAstrolabeProxy(
+  optionsOrPort: ProxyServerOptions | number = {},
+  hostArg?: string
+): FastifyInstance {
+  const options: ProxyServerOptions =
+    typeof optionsOrPort === 'number'
+      ? { port: optionsOrPort, host: hostArg }
+      : optionsOrPort;
+
   const server = Fastify({ logger: true });
   const verifier = new ProxyPaymentVerifier();
   const serviceOrigins = { ...DEFAULT_SERVICE_ORIGINS, ...(options.serviceOrigins || {}) };

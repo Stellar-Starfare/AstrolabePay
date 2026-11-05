@@ -8,8 +8,8 @@
     "frontend"
   ],
   "scripts": {
-    "build": "npm run build --workspaces --if-present",
-    "build:contracts": "stellar contract build --manifest-path contracts/astrolabe_core/Cargo.toml",
+    "build": "npm run build --workspace=@astrolabe/sdk && npm run build --workspace=@astrolabe/proxy && npm run build --workspace=@astrolabe/cli && npm run build:frontend",
+    "build:contracts": "cargo build --target wasm32-unknown-unknown --release --manifest-path contracts/astrolabe_core/Cargo.toml",
     "test": "npm run test:contracts && npm run test --workspaces --if-present",
     "test:contracts": "cargo test --manifest-path contracts/astrolabe_core/Cargo.toml",
     "dev:frontend": "npm run dev --workspace=frontend",
