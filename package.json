@@ -10,11 +10,13 @@
   "scripts": {
     "build": "npm run build --workspaces --if-present",
     "build:contracts": "stellar contract build --manifest-path contracts/astrolabe_core/Cargo.toml",
+    "test": "npm run test:contracts && npm run test --workspaces --if-present",
     "test:contracts": "cargo test --manifest-path contracts/astrolabe_core/Cargo.toml",
     "dev:frontend": "npm run dev --workspace=frontend",
     "build:frontend": "npm run build --workspace=frontend",
     "start:proxy": "npm run start --workspace=@astrolabe/proxy",
-    "lint": "echo \"Linting passed\""
+    "lint": "tsc --noEmit --project packages/sdk/tsconfig.json && tsc --noEmit --project packages/proxy/tsconfig.json && tsc --noEmit --project packages/cli/tsconfig.json && tsc --noEmit --project frontend/tsconfig.json",
+    "format": "cargo fmt --manifest-path contracts/astrolabe_core/Cargo.toml"
   },
   "keywords": [
     "stellar",
