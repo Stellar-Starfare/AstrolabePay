@@ -6,7 +6,8 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc",
-    "watch": "tsc --watch"
+    "watch": "tsc --watch",
+    "test": "tsc --noEmit"
   },
   "dependencies": {
     "@stellar/stellar-sdk": "^12.3.0",
