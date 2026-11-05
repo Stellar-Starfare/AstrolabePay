@@ -16,8 +16,8 @@ use soroban_sdk::{
     contract, contractimpl, token, Address, BytesN, Env, String, Symbol,
 };
 
-// 17,280 ledgers is roughly 24 hours at 5 seconds per ledger on Stellar
-const LEDGERS_PER_DAY: u32 = 17_280;
+// 86,400 seconds represents a 24-hour rolling spend window on Stellar consensus
+const SECONDS_PER_DAY: u64 = 86_400;
 
 #[contract]
 pub struct AstrolabePayContract;
@@ -79,6 +79,7 @@ impl AstrolabePayContract {
             spent_today_stroops: 0,
             spent_total_stroops: 0,
             last_spend_ledger: current_ledger,
+            last_spend_timestamp: timestamp,
             active: true,
             created_at: timestamp,
         };
@@ -167,11 +168,13 @@ impl AstrolabePayContract {
         }
 
         let current_ledger = env.ledger().sequence();
-        // Reset daily spend if a full day of ledgers has elapsed
-        if current_ledger.saturating_sub(agent_record.last_spend_ledger) >= LEDGERS_PER_DAY {
+        let current_time = env.ledger().timestamp();
+        // Reset daily spend if a full 24-hour window (86,400 seconds) has elapsed
+        if current_time.saturating_sub(agent_record.last_spend_timestamp) >= SECONDS_PER_DAY {
             agent_record.spent_today_stroops = 0;
-            agent_record.last_spend_ledger = current_ledger;
+            agent_record.last_spend_timestamp = current_time;
         }
+        agent_record.last_spend_ledger = current_ledger;
 
         // Enforce daily policy limit
         if agent_record.spent_today_stroops + amount_stroops > agent_record.daily_limit_stroops {
@@ -347,9 +350,9 @@ impl AstrolabePayContract {
             if !record.active {
                 return false;
             }
-            let current_ledger = env.ledger().sequence();
+            let current_time = env.ledger().timestamp();
             let mut spent_today = record.spent_today_stroops;
-            if current_ledger.saturating_sub(record.last_spend_ledger) >= LEDGERS_PER_DAY {
+            if current_time.saturating_sub(record.last_spend_timestamp) >= SECONDS_PER_DAY {
                 spent_today = 0;
             }
             (spent_today + amount_stroops <= record.daily_limit_stroops)

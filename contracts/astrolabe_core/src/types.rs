@@ -25,6 +25,7 @@ pub struct AgentRecord {
     pub spent_today_stroops: i128,
     pub spent_total_stroops: i128,
     pub last_spend_ledger: u32,
+    pub last_spend_timestamp: u64,
     pub active: bool,
     pub created_at: u64,
 }
