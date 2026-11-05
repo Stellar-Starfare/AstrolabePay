@@ -43,6 +43,7 @@ impl AstrolabePayContract {
             .set(&DataKey::Stats, &SystemStats::default());
         env.storage().instance().set(&DataKey::AgentCount, &0u32);
         env.storage().instance().set(&DataKey::ServiceCount, &0u32);
+        env.storage().instance().extend_ttl(100_000, 500_000);
 
         Ok(())
     }
@@ -227,6 +228,7 @@ impl AstrolabePayContract {
         stats.total_settlements += 1;
         stats.total_volume_stroops += amount_stroops;
         env.storage().instance().set(&DataKey::Stats, &stats);
+        env.storage().instance().extend_ttl(100_000, 500_000);
 
         events::emit_payment_settled(&env, &agent, &recipient, &service_id, amount_stroops, &nonce);
         Ok(receipt)
@@ -389,5 +391,39 @@ impl AstrolabePayContract {
         } else {
             false
         }
+    }
+}    /// Upgrade contract WASM executable (admin only)
+    pub fn upgrade(env: Env, admin: Address, new_wasm_hash: BytesN<32>) -> Result<(), ContractError> {
+        admin.require_auth();
+        let stored_admin: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .ok_or(ContractError::NotInitialized)?;
+
+        if stored_admin != admin {
+            return Err(ContractError::Unauthorized);
+        }
+
+        env.deployer().update_current_contract_wasm(new_wasm_hash);
+        Ok(())
+    }
+
+    /// Update admin address (current admin only)
+    pub fn set_admin(env: Env, current_admin: Address, new_admin: Address) -> Result<(), ContractError> {
+        current_admin.require_auth();
+        let stored_admin: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .ok_or(ContractError::NotInitialized)?;
+
+        if stored_admin != current_admin {
+            return Err(ContractError::Unauthorized);
+        }
+
+        env.storage().instance().set(&DataKey::Admin, &new_admin);
+        env.storage().instance().extend_ttl(100_000, 500_000);
+        Ok(())
     }
 }
